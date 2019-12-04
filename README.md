@@ -1,10 +1,28 @@
 # AWS CloudWatch Metrics Collection Prototype
 
-Something something collect metrics from AWS Cloudwatch.
+Something something collect metrics from AWS CloudWatch something.
 
 ## Overview
 
 Coming soon.
+
+## Roadmap
+
+- [x] Authenticate to the AWS API (via `AWS_ACCESS_KEY` and `AWS_SECRET_ACCESS_KEY`)
+- [x] Support AWS IAM environment variables
+  - [x] `$AWS_ACCESS_KEY`
+  - [x] `AWS_SECRET_ACCESS_KEY`
+  - [x] `AWS_REGION`
+- [x] Use the [CloudWatch ListMetrics API][1] to list available metrics per
+      region, CloudWatch Namespace, and CloudWatch Metric
+- [x] Optionally filter available metrics by one or more CloudWatch Dimensions
+- [ ] Fetch CloudWatch metrics
+- [ ] Output collected metrics in Graphite plaintext format
+- [ ] Output collected metrics in InfluxDB line protocol format
+- [ ] Output collected metrics in Prometheus exposition format
+- [ ] Add command flags and `--help` usage instructions 
+
+[1]: https://docs.aws.amazon.com/AmazonCloudWatch/latest/APIReference/API_ListMetrics.html
 
 ## References
 
