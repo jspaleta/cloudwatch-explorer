@@ -26,8 +26,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	metric := os.Args[1]
-	namespace := os.Args[2]
+	namespace := os.Args[1]
+	metric := os.Args[2]
 	var dimensions []*cloudwatch.DimensionFilter
 	if len(os.Args) > 3 {
 		for _, v := range strings.Split(os.Args[3], ",") {
