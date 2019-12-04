@@ -11,16 +11,6 @@ import (
 	"strings"
 )
 
-type Example struct {
-	Foo string `json:"foo"`
-	Bar string `json:"bar"`
-}
-
-var (
-	foo string
-	bar string
-)
-
 func CreateAwsSessionWithOptions() *session.Session {
 	// Create a Session with a custom region
 	aws_session := session.Must(session.NewSessionWithOptions(session.Options{
