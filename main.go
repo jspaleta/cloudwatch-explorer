@@ -139,7 +139,7 @@ func collectMetrics(event *corev2.Event) error {
 		for _, d := range m.Dimensions {
 			k := *d.Name
 			v := *d.Value
-			dimensions = dimensions + fmt.Sprintf("%s:%s, ", k, v)
+			dimensions = dimensions + fmt.Sprintf("%s=%s, ", k, v)
 		}
 		dimensions = strings.TrimRight(dimensions, ", ")
 		fmt.Printf("%s/%s (%s)\n", namespace, name, dimensions)
