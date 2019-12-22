@@ -15,8 +15,8 @@ import (
 
 type CheckConfig struct {
 	sensu.PluginConfig
-	cloudwatchMetricName             string
 	cloudwatchMetricNamespace        string
+	cloudwatchMetricName             string
 	cloudwatchMetricDimensions       string
 	cloudwatchMetricDimensionFilters []*cloudwatch.DimensionFilter
 }
@@ -24,21 +24,12 @@ type CheckConfig struct {
 var (
 	config = CheckConfig{
 		PluginConfig: sensu.PluginConfig{
-			Name:  "cloudwatch-metric-lister",
-			Short: "The Sensu Go Cloudwatch check plugin for listing Cloudwatch Metrics.",
+			Name:  "cloudwatch-browser",
+			Short: "A Sensu Go Cloudwatch check plugin for listing Cloudwatch Metrics.",
 		},
 	}
 
 	cloudwatchConfigOptions = []*sensu.PluginConfigOption{
-		{
-			Path:      "metric-name",
-			Env:       "CLOUDWATCH_METRIC_NAME",
-			Argument:  "metric-name",
-			Shorthand: "m",
-			Usage:     "The AWS Cloudwatch metric name. Can also be set via the $CLOUDWATCH_METRIC_NAME environment variable.",
-			Value:     &config.cloudwatchMetricName,
-			Default:   "",
-		},
 		{
 			Path:      "metric-namespace",
 			Env:       "CLOUDWATCH_METRIC_NAMESPACE",
@@ -46,6 +37,15 @@ var (
 			Shorthand: "n",
 			Usage:     "The AWS Cloudwatch metric namespace. Can also be set via the $CLOUDWATCH_METRIC_NAMESPACE environment variable.",
 			Value:     &config.cloudwatchMetricNamespace,
+			Default:   "",
+		},
+		{
+			Path:      "metric-name",
+			Env:       "CLOUDWATCH_METRIC_NAME",
+			Argument:  "metric-name",
+			Shorthand: "m",
+			Usage:     "The AWS Cloudwatch metric name. Can also be set via the $CLOUDWATCH_METRIC_NAME environment variable.",
+			Value:     &config.cloudwatchMetricName,
 			Default:   "",
 		},
 		{
@@ -71,15 +71,15 @@ func validateArgs(event *corev2.Event) error {
 		return fmt.Errorf("No Cloudwatch metric namespace provided.")
 	}
 
-	if config.cloudwatchMetricName == "" {
-		log.Fatalf("ERROR: no Cloudwatch metric name provided.")
-		return fmt.Errorf("No Cloudwatch metric name provided.")
-	}
+	// if config.cloudwatchMetricName == "" {
+	// 	log.Fatalf("ERROR: no Cloudwatch metric name provided.")
+	// 	return fmt.Errorf("No Cloudwatch metric name provided.")
+	// }
 
-	if config.cloudwatchMetricDimensions == "" {
-		log.Fatalf("ERROR: no Cloudwatch metric dimension(s) provided.")
-		return fmt.Errorf("No Cloudwatch metric dimension(s) provided.")
-	}
+	// if config.cloudwatchMetricDimensions == "" {
+	// 	log.Fatalf("ERROR: no Cloudwatch metric dimension(s) provided.")
+	// 	return fmt.Errorf("No Cloudwatch metric dimension(s) provided.")
+	// }
 
 	return nil
 }
@@ -111,19 +111,38 @@ func collectMetrics(event *corev2.Event) error {
 	session := CreateAwsSessionWithOptions()
 	svc := cloudwatch.New(session)
 
-	err := parseCloudwatchMetricDimensions(config.cloudwatchMetricDimensions)
+	if config.cloudwatchMetricDimensions != "" {
+		err := parseCloudwatchMetricDimensions(config.cloudwatchMetricDimensions)
+		if err != nil {
+			return fmt.Errorf("ERROR: %s", err)
+		}
+	} else {
+		config.cloudwatchMetricDimensionFilters = nil
+	}
+
+	input := cloudwatch.ListMetricsInput{}
+	input.Namespace = aws.String(config.cloudwatchMetricNamespace)
+	input.Dimensions = config.cloudwatchMetricDimensionFilters
+	if config.cloudwatchMetricName != "" {
+		input.MetricName = &config.cloudwatchMetricName
+	}
+
+	result, err := svc.ListMetrics(&input)
 	if err != nil {
 		return fmt.Errorf("ERROR: %s", err)
 	}
 
-	result, err := svc.ListMetrics(&cloudwatch.ListMetricsInput{
-		MetricName: aws.String(config.cloudwatchMetricName),
-		Namespace:  aws.String(config.cloudwatchMetricNamespace),
-		Dimensions: config.cloudwatchMetricDimensionFilters,
-	})
-	if err != nil {
-		return fmt.Errorf("ERROR: %s", err)
+	for _, m := range result.Metrics {
+		namespace := *m.Namespace
+		name := *m.MetricName
+		var dimensions string
+		for _, d := range m.Dimensions {
+			k := *d.Name
+			v := *d.Value
+			dimensions = dimensions + fmt.Sprintf("%s:%s, ", k, v)
+		}
+		dimensions = strings.TrimRight(dimensions, ", ")
+		fmt.Printf("%s/%s (%s)\n", namespace, name, dimensions)
 	}
-	fmt.Println("Metrics", result.Metrics)
 	return nil
 }
