@@ -1,10 +1,8 @@
 # AWS CloudWatch Metrics Explorer
 
-Something something collect metrics from AWS CloudWatch something.
-
 ## Overview
 
-The `cloudwatch-explorer` utility can be used to look for available cloudwatch
+The `cloudwatch-explorer` utility can be used to lookup available Cloudwatch
 metrics.
 
 ```
