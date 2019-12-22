@@ -43,8 +43,14 @@ AWS/EC2/CPUUtilization (InstanceId=i-xxxxxxxxxxxxxxxxx)
 AWS/EC2/StatusCheckFailed_System (InstanceId=i-xxxxxxxxxxxxxxxxx)
 AWS/EC2/StatusCheckFailed_Instance (InstanceId=i-xxxxxxxxxxxxxxxxx)
 AWS/EC2/StatusCheckFailed (InstanceId=i-xxxxxxxxxxxxxxxxx)
+```
 
-./cloudwatch-explorer -n AWS/Kinesis
+_NOTE: the `--metric-name` and `--metric-dimensions` flags are optional, making
+it possible to query for all avialable metrics in a Cloudwatch metric
+namespace._
+
+```shell
+$ ./cloudwatch-explorer -n AWS/Kinesis
 AWS/Kinesis/WriteProvisionedThroughputExceeded (StreamName=example-stream)
 AWS/Kinesis/PutRecords.Success (StreamName=example-stream)
 AWS/Kinesis/PutRecords.Bytes (StreamName=example-stream)
