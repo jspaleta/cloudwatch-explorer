@@ -24,8 +24,8 @@ type CheckConfig struct {
 var (
 	config = CheckConfig{
 		PluginConfig: sensu.PluginConfig{
-			Name:  "cloudwatch-browser",
-			Short: "A Sensu Go Cloudwatch check plugin for listing Cloudwatch Metrics.",
+			Name:  "cloudwatch-explorer",
+			Short: "An AWS Cloudwatch metric explorer.",
 		},
 	}
 
@@ -37,14 +37,14 @@ var (
 			Shorthand: "n",
 			Usage:     "The AWS Cloudwatch metric namespace. Can also be set via the $CLOUDWATCH_METRIC_NAMESPACE environment variable.",
 			Value:     &config.cloudwatchMetricNamespace,
-			Default:   "",
+			Default:   "AWS/EC2",
 		},
 		{
 			Path:      "metric-name",
 			Env:       "CLOUDWATCH_METRIC_NAME",
 			Argument:  "metric-name",
 			Shorthand: "m",
-			Usage:     "The AWS Cloudwatch metric name. Can also be set via the $CLOUDWATCH_METRIC_NAME environment variable.",
+			Usage:     "The AWS Cloudwatch metric name. Can also be set via the $CLOUDWATCH_METRIC_NAME environment variable. OPTIONAL.",
 			Value:     &config.cloudwatchMetricName,
 			Default:   "",
 		},
@@ -53,7 +53,7 @@ var (
 			Env:       "CLOUDWATCH_METRIC_DIMENSION",
 			Argument:  "metric-dimensions",
 			Shorthand: "d",
-			Usage:     "The AWS Cloudwatch metric dimension. Can also be set via the $CLOUDWATCH_METRIC_DIMENSION environment variable.",
+			Usage:     "The AWS Cloudwatch metric dimension. Can also be set via the $CLOUDWATCH_METRIC_DIMENSION environment variable. OPTIONAL.",
 			Value:     &config.cloudwatchMetricDimensions,
 			Default:   "",
 		},
