@@ -1,148 +1,125 @@
 package main
 
 import (
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/cloudwatch"
-
+	"context"
 	"fmt"
-	"log"
-	"strings"
+	"strconv"
 
-	corev2 "github.com/sensu/sensu-go/api/core/v2"
-	"github.com/sensu/sensu-plugins-go-library/sensu"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
+	v2 "github.com/sensu/sensu-go/api/core/v2"
+	"github.com/sensu/sensu-plugin-sdk/aws"
+	"github.com/sensu/sensu-plugin-sdk/sensu"
 )
 
-type CheckConfig struct {
+// Config represents the check plugin config.
+type Config struct {
+	//Base Sensu plugin configs
 	sensu.PluginConfig
-	cloudwatchMetricNamespace        string
-	cloudwatchMetricName             string
-	cloudwatchMetricDimensions       string
-	cloudwatchMetricDimensionFilters []*cloudwatch.DimensionFilter
+	//AWS specific Sensu plugin configs
+	aws.AWSPluginConfig
+	//Additional configs for this check command
+	Example string
+	Verbose bool
 }
 
 var (
-	config = CheckConfig{
+	//initialize Sensu plugin Config object
+	plugin = Config{
 		PluginConfig: sensu.PluginConfig{
-			Name:  "cloudwatch-explorer",
-			Short: "An AWS Cloudwatch metric explorer.",
+			Name:     "Cloudwatch Explorer",
+			Short:    "Cloudwatch Exploror",
+			Keyspace: "sensu.io/plugins/cloudwatch-explorer/config",
 		},
 	}
-
-	cloudwatchConfigOptions = []*sensu.PluginConfigOption{
-		{
-			Path:      "metric-namespace",
-			Env:       "CLOUDWATCH_METRIC_NAMESPACE",
-			Argument:  "metric-namespace",
-			Shorthand: "n",
-			Usage:     "The AWS Cloudwatch metric namespace. Can also be set via the $CLOUDWATCH_METRIC_NAMESPACE environment variable.",
-			Value:     &config.cloudwatchMetricNamespace,
-			Default:   "AWS/EC2",
-		},
-		{
-			Path:      "metric-name",
-			Env:       "CLOUDWATCH_METRIC_NAME",
-			Argument:  "metric-name",
-			Shorthand: "m",
-			Usage:     "The AWS Cloudwatch metric name. Can also be set via the $CLOUDWATCH_METRIC_NAME environment variable. OPTIONAL.",
-			Value:     &config.cloudwatchMetricName,
-			Default:   "",
-		},
-		{
-			Path:      "metric-dimensions",
-			Env:       "CLOUDWATCH_METRIC_DIMENSION",
-			Argument:  "metric-dimensions",
-			Shorthand: "d",
-			Usage:     "The AWS Cloudwatch metric dimension. Can also be set via the $CLOUDWATCH_METRIC_DIMENSION environment variable. OPTIONAL.",
-			Value:     &config.cloudwatchMetricDimensions,
-			Default:   "",
+	//initialize options list with custom options
+	options = []*sensu.PluginConfigOption{
+		&sensu.PluginConfigOption{
+			Path:      "verbose",
+			Argument:  "verbose",
+			Shorthand: "v",
+			Default:   false,
+			Usage:     "Enable verbose output",
+			Value:     &plugin.Verbose,
 		},
 	}
 )
 
+func init() {
+	//append common AWS options to options list
+	options = append(options, plugin.GetAWSOpts()...)
+}
+
 func main() {
-	check := sensu.InitCheck(&config.PluginConfig, cloudwatchConfigOptions, validateArgs, collectMetrics)
+	check := sensu.NewGoCheck(&plugin.PluginConfig, options, checkArgs, executeCheck, false)
 	check.Execute()
 }
 
-func validateArgs(event *corev2.Event) error {
-	if config.cloudwatchMetricNamespace == "" {
-		log.Fatalf("ERROR: no Cloudwatch metric namespace provided.")
-		return fmt.Errorf("No Cloudwatch metric namespace provided.")
+func checkArgs(event *v2.Event) (int, error) {
+	// Check for valid AWS credentials
+	if plugin.Verbose {
+		fmt.Println("Checking AWS Creds")
+	}
+	if state, err := plugin.CheckAWSCreds(); err != nil {
+		return state, err
 	}
 
-	// if config.cloudwatchMetricName == "" {
-	// 	log.Fatalf("ERROR: no Cloudwatch metric name provided.")
-	// 	return fmt.Errorf("No Cloudwatch metric name provided.")
-	// }
+	// Specific Argument Checking for this command
+	if plugin.Verbose {
+		fmt.Println("Checking Arguments")
+	}
 
-	// if config.cloudwatchMetricDimensions == "" {
-	// 	log.Fatalf("ERROR: no Cloudwatch metric dimension(s) provided.")
-	// 	return fmt.Errorf("No Cloudwatch metric dimension(s) provided.")
-	// }
-
-	return nil
+	return sensu.CheckStateOK, nil
 }
 
-func CreateAwsSessionWithOptions() *session.Session {
-	// Create a Session with a custom region
-	aws_session := session.Must(session.NewSessionWithOptions(session.Options{
-		SharedConfigState: session.SharedConfigEnable,
-	}))
-
-	return aws_session
+func executeCheck(event *v2.Event) (int, error) {
+	//Make sure plugin.CheckAwsCreds() worked as expected
+	if plugin.AWSConfig == nil {
+		return sensu.CheckStateCritical, fmt.Errorf("AWS Config undefined, something went wrong in processing AWS configuration information")
+	}
+	//Start AWS Service specific client
+	client := cloudwatch.NewFromConfig(*plugin.AWSConfig)
+	//Run business logic for check
+	state, err := checkFunction(client)
+	return state, err
 }
 
-// Parse Dimension strings, return slice of cloudwatch.DimensionFilter structs.
-func parseCloudwatchMetricDimensions(d string) error {
-	for _, v := range strings.Split(d, ",") {
-		name := strings.Split(v, "=")[0]
-		value := strings.Split(v, "=")[1]
-		filter := &cloudwatch.DimensionFilter{
-			Name:  &name,
-			Value: &value,
-		}
-		config.cloudwatchMetricDimensionFilters = append(config.cloudwatchMetricDimensionFilters, filter)
-	}
-	return nil
+//Create service interface to help with mock testing
+type ServiceAPI interface {
+	ListMetrics(ctx context.Context,
+		params *cloudwatch.ListMetricsInput,
+		optFns ...func(*cloudwatch.Options)) (*cloudwatch.ListMetricsOutput, error)
 }
 
-func collectMetrics(event *corev2.Event) error {
-	session := CreateAwsSessionWithOptions()
-	svc := cloudwatch.New(session)
+func GetMetrics(c context.Context, api ServiceAPI, input *cloudwatch.ListMetricsInput) (*cloudwatch.ListMetricsOutput, error) {
+	return api.ListMetrics(c, input)
+}
 
-	if config.cloudwatchMetricDimensions != "" {
-		err := parseCloudwatchMetricDimensions(config.cloudwatchMetricDimensions)
-		if err != nil {
-			return fmt.Errorf("ERROR: %s", err)
-		}
-	} else {
-		config.cloudwatchMetricDimensionFilters = nil
-	}
+// Note: Use ServiceAPI interface definition to make function testable with mock API testing pattern
+func checkFunction(client ServiceAPI) (int, error) {
+	input := &cloudwatch.ListMetricsInput{}
+	result, err := GetMetrics(context.TODO(), client, input)
 
-	input := cloudwatch.ListMetricsInput{}
-	input.Namespace = aws.String(config.cloudwatchMetricNamespace)
-	input.Dimensions = config.cloudwatchMetricDimensionFilters
-	if config.cloudwatchMetricName != "" {
-		input.MetricName = &config.cloudwatchMetricName
-	}
-
-	result, err := svc.ListMetrics(&input)
 	if err != nil {
-		return fmt.Errorf("ERROR: %s", err)
+		fmt.Println("Could not get metrics")
+		return sensu.CheckStateCritical, nil
 	}
+
+	fmt.Println("Metrics:")
+	numMetrics := 0
 
 	for _, m := range result.Metrics {
-		namespace := *m.Namespace
-		name := *m.MetricName
-		var dimensions string
+		fmt.Println("   Metric Name: " + *m.MetricName)
+		fmt.Println("   Namespace:   " + *m.Namespace)
+		fmt.Println("   Dimensions:")
 		for _, d := range m.Dimensions {
-			k := *d.Name
-			v := *d.Value
-			dimensions = dimensions + fmt.Sprintf("%s=%s, ", k, v)
+			fmt.Println("      " + *d.Name + ": " + *d.Value)
 		}
-		dimensions = strings.TrimRight(dimensions, ", ")
-		fmt.Printf("%s/%s (%s)\n", namespace, name, dimensions)
+
+		fmt.Println("")
+		numMetrics++
 	}
-	return nil
+
+	fmt.Println("Found " + strconv.Itoa(numMetrics) + " metrics")
+
+	return sensu.CheckStateOK, nil
 }
