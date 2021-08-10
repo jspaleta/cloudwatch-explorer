@@ -1,4 +1,4 @@
-module github.com/sensu/sensu-cloudwatch-check
+module github.com/calebhailey/cloudwatch-explorer
 
 go 1.15
 

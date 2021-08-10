@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"strconv"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
 	v2 "github.com/sensu/sensu-go/api/core/v2"
@@ -104,9 +104,9 @@ func checkFunction(client ServiceAPI) (int, error) {
 		return sensu.CheckStateCritical, nil
 	}
 
+	/*  Output format from aws documented examples
 	fmt.Println("Metrics:")
 	numMetrics := 0
-
 	for _, m := range result.Metrics {
 		fmt.Println("   Metric Name: " + *m.MetricName)
 		fmt.Println("   Namespace:   " + *m.Namespace)
@@ -114,12 +114,23 @@ func checkFunction(client ServiceAPI) (int, error) {
 		for _, d := range m.Dimensions {
 			fmt.Println("      " + *d.Name + ": " + *d.Value)
 		}
-
 		fmt.Println("")
-		numMetrics++
-	}
 
+	}
 	fmt.Println("Found " + strconv.Itoa(numMetrics) + " metrics")
+	*/
+	for _, m := range result.Metrics {
+		namespace := *m.Namespace
+		name := *m.MetricName
+		var dimensions string
+		for _, d := range m.Dimensions {
+			k := *d.Name
+			v := *d.Value
+			dimensions = dimensions + fmt.Sprintf("%s=%s, ", k, v)
+		}
+		dimensions = strings.TrimRight(dimensions, ", ")
+		fmt.Printf("%s/%s (%s)\n", namespace, name, dimensions)
+	}
 
 	return sensu.CheckStateOK, nil
 }
