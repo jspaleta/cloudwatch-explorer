@@ -18,8 +18,9 @@ type Config struct {
 	//AWS specific Sensu plugin configs
 	aws.AWSPluginConfig
 	//Additional configs for this check command
-	Example string
-	Verbose bool
+	Example  string
+	Verbose  bool
+	MaxPages int
 }
 
 var (
@@ -40,6 +41,14 @@ var (
 			Default:   false,
 			Usage:     "Enable verbose output",
 			Value:     &plugin.Verbose,
+		},
+		&sensu.PluginConfigOption{
+			Path:      "max-pages",
+			Argument:  "max-pages",
+			Shorthand: "m",
+			Default:   1,
+			Usage:     "Maximum number of result pages",
+			Value:     &plugin.MaxPages,
 		},
 	}
 )
@@ -96,14 +105,8 @@ func GetMetrics(c context.Context, api ServiceAPI, input *cloudwatch.ListMetrics
 
 // Note: Use ServiceAPI interface definition to make function testable with mock API testing pattern
 func checkFunction(client ServiceAPI) (int, error) {
-	input := &cloudwatch.ListMetricsInput{}
-	result, err := GetMetrics(context.TODO(), client, input)
 
-	if err != nil {
-		fmt.Println("Could not get metrics")
-		return sensu.CheckStateCritical, nil
-	}
-
+	numPages := 0
 	/*  Output format from aws documented examples
 	fmt.Println("Metrics:")
 	numMetrics := 0
@@ -119,17 +122,37 @@ func checkFunction(client ServiceAPI) (int, error) {
 	}
 	fmt.Println("Found " + strconv.Itoa(numMetrics) + " metrics")
 	*/
-	for _, m := range result.Metrics {
-		namespace := *m.Namespace
-		name := *m.MetricName
-		var dimensions string
-		for _, d := range m.Dimensions {
-			k := *d.Name
-			v := *d.Value
-			dimensions = dimensions + fmt.Sprintf("%s=%s, ", k, v)
+	for getList := true; getList && numPages < plugin.MaxPages; {
+		getList = false
+		input := &cloudwatch.ListMetricsInput{}
+		result, err := GetMetrics(context.TODO(), client, input)
+
+		if err != nil {
+			fmt.Println("Could not get metrics list")
+			return sensu.CheckStateCritical, nil
 		}
-		dimensions = strings.TrimRight(dimensions, ", ")
-		fmt.Printf("%s/%s (%s)\n", namespace, name, dimensions)
+		if result.NextToken != nil {
+			getList = true
+			numPages++
+			input.NextToken = result.NextToken
+		}
+
+		for _, m := range result.Metrics {
+			namespace := *m.Namespace
+			name := *m.MetricName
+			var dimensions string
+			for _, d := range m.Dimensions {
+				k := *d.Name
+				v := *d.Value
+				dimensions = dimensions + fmt.Sprintf("%s=%s, ", k, v)
+			}
+			dimensions = strings.TrimRight(dimensions, ", ")
+			fmt.Printf("%s/%s (%s)\n", namespace, name, dimensions)
+		}
+	}
+	if numPages > plugin.MaxPages {
+		fmt.Println("Warning: max allowed ListMetrics result pages exceeded, increase --max-pages value")
+		return sensu.CheckStateWarning, nil
 	}
 
 	return sensu.CheckStateOK, nil
